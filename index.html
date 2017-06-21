@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <script src="jquery-3.2.0.min.js"></script>
+    <script src="fabric.js"></script>
+</head>
+
+<body>
+    <canvas id="c"></canvas>
+    <button id="crop">裁剪</button>
+    <button id="startCrop">框选裁剪区域</button>
+    <canvas style="visibility: hidden;" id="canvas_crop"></canvas>
+</body>
+
+<script>
+    var canvas = new fabric.Canvas('c', {
+        width: 500,
+        height: 400,
+        strokeWidth: 5,
+        stroke: 'rgba(100,200,200,0.5)'
+    });
+
+    var el;
+    var object, lastActive;
+    var selection_object_left = 0;
+    var selection_object_top = 0;
+    var isCropping = false;
+
+
+    $(document).ready(function() {
+        $('button#crop').hide();
+        img = new fabric.Image.fromURL('cat.jpg', function(img) {
+            img.set('selectable', true);
+            img.set('left', getObjLeft(img.getWidth()));
+            img.set('top', getObjTop(img.getHeight()));
+            img.crossOrigin = 'anonymous';
+            canvas.add(img);
+            canvas.selection = false;
+            canvas.renderAll();
+        });
+    });
+
+    $('#crop').on('click', function(event) {
+        $('button#crop').hide();
+        if (!isCropping) {
+            alert("请先框选裁剪区域。");
+            return;
+        }
+
+        var left = el.left - object.left;
+        var top = el.top - object.top;
+
+        left *= 1;
+        top *= 1;
+
+        var width = el.width * 1;
+        var height = el.height * 1;
+
+        //将当前帧导出到一个新的canvas中并执行裁剪，在此期间暂停记录历史记录。
+        cropImage(object, el.left, el.top, parseInt(el.scaleY * height), parseInt(width * el.scaleX));
+        for (var i = 0; i < $("#layers li").length; i++) {
+            canvas.item(i).selectable = true;
+        }
+        disabled = true;
+
+        canvas.remove(object);
+        canvas.remove(canvas.getActiveObject());
+        lastActive = object;
+        canvas.renderAll();
+
+        isCropping = false;
+    });
+
+    $('#startCrop').on('click', function() {
+        $("button#crop").show();
+        canvas.remove(el);
+        if (canvas.getActiveObject()) {
+            if (canvas.getActiveObject().type == 'sprite') {
+                alert("所选对象不可裁剪。");
+                return;
+            }
+            object = canvas.getActiveObject();
+            if (lastActive !== object) {
+                console.log('different object');
+            } else {
+                console.log('same object');
+            }
+            if (lastActive && lastActive !== object) {
+                lastActive.clipTo = null;
+            }
+
+            //生成一个和待裁剪元素相同大小的矩形用于框选裁剪区域
+            el = new fabric.Rect({
+                fill: 'rgba(0,0,0,0)',
+                originX: 'left',
+                originY: 'top',
+                stroke: '#ccc',
+                //strokeDashArray: [2, 2],
+                strokWidth: 5,
+                //opacity: 1,
+                width: 1,
+                height: 1,
+                borderColor: '#36fd00',
+                cornerColor: 'green',
+                hasRotatingPoint: false,
+                selectable: true
+            });
+
+            el.left = canvas.getActiveObject().left;
+            selection_object_left = canvas.getActiveObject().left;
+            selection_object_top = canvas.getActiveObject().top;
+            el.top = canvas.getActiveObject().top;
+            el.width = canvas.getActiveObject().width * canvas.getActiveObject().scaleX;
+            el.height = canvas.getActiveObject().height * canvas.getActiveObject().scaleY;
+
+
+            canvas.add(el);
+            canvas.setActiveObject(el);
+            for (var i = 0; i < $("#layers li").length; i++) {
+                canvas.item(i).selectable = false;
+            }
+        } else {
+            alert("请选中一个元素。");
+        }
+        isCropping = true;
+
+    });
+
+    function cropImage(png, left, top, height, width) {
+        //将图片放进一个新的canvas中，经裁剪后导出一个新的图片。
+        //如果用户选框大于原图片，则将选框缩至原图片大小
+        if (top < png.top) {
+            height = height - (png.top - top);
+            top = png.top;
+        }
+        if (left < png.left) {
+            width = width - (png.left - left);
+            left = png.left;
+        }
+        if (top + height > png.top + png.height * png.scaleY)
+            height = png.top + png.height * png.scaleY - top;
+        if (left + width > png.left + png.width * png.scaleX)
+            width = png.left + png.width * png.scaleX - left;
+
+        var canvas_crop = new fabric.Canvas("canvas_crop");
+
+        fabric.Image.fromURL(canvas.toDataURL('png'), function(img) {
+            img.set('left', -left);
+            img.set('top', -top);
+            canvas_crop.add(img)
+            canvas_crop.setHeight(height);
+            canvas_crop.setWidth(width);
+            canvas_crop.renderAll();
+            fabric.Image.fromURL(canvas_crop.toDataURL('png'), function(croppedImg) {
+                croppedImg.set('left', left);
+                croppedImg.set('top', top);
+                canvas.add(croppedImg).renderAll();
+            });
+        });
+
+    }
+
+    function getObjLeft(objWidth) {
+        return canvas.getWidth() / 2 - objWidth / 2;
+    }
+
+    function getObjTop(objHeight) {
+        return canvas.getHeight() / 2 - objHeight / 2;
+    }
+</script>
+
+</html>
